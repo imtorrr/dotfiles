@@ -1,5 +1,5 @@
 # If you come from bash you might have to change your $PATH.
-# export PATH=$HOME/bin:$HOME/.local/bin:/usr/local/bin:$PATH
+export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:$PATH"
 
 # Path to your Oh My Zsh installation.
 export ZSH="$HOME/.oh-my-zsh"
@@ -101,11 +101,20 @@ source $ZSH/oh-my-zsh.sh
 # For a full list of active aliases, run `alias`.
 #
 # Example aliases
-# alias zshconfig="mate ~/.zshrc"
-# alias ohmyzsh="mate ~/.oh-my-zsh"
-#
-export PATH="/home/$USER/.local/bin:$PATH"
+alias zshconfig="\$EDITOR ~/.zshrc"
+alias ohmyzsh="\$EDITOR ~/.oh-my-zsh"
 
-eval "$(zoxide init zsh --cmd cd)"
-eval "$(uv generate-shell-completion zsh)"
-eval "$(uvx --generate-shell-completion zsh)"
+# Initialize zoxide
+if command -v zoxide &> /dev/null; then
+  eval "$(zoxide init zsh --cmd cd)"
+fi
+
+# Initialize uv completions
+if command -v uv &> /dev/null; then
+  eval "$(uv generate-shell-completion zsh)"
+fi
+
+# Initialize uvx completions
+if command -v uvx &> /dev/null; then
+  eval "$(uvx --generate-shell-completion zsh)"
+fi
