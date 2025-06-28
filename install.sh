@@ -45,7 +45,7 @@ install_dependencies() {
     fi
     # Tools from your plugins: bat (for zsh-bat), zoxide, uv, gcloud, tmux
     # Other common dev tools: neovim, fzf
-    brew install bat zoxide uv google-cloud-sdk tmux neovim fzf sed ripgrep
+    brew install bat zoxide tmux neovim fzf sed ripgrep
   elif [[ "$OS" == "Linux" ]]; then
     info "Detected Linux. Using APT (for Debian/Ubuntu)."
     # Check for sudo
@@ -55,7 +55,7 @@ install_dependencies() {
     sudo apt-get update
     # Note: 'uv' is not in apt repos, we'll install it separately.
     # 'google-cloud-sdk' is now 'google-cloud-cli' in apt.
-    sudo apt-get install -y curl git zsh bat zoxide tmux neovim fzf google-cloud-sdk sed ripgrep
+    sudo apt-get install -y curl git zsh bat zoxide tmux neovim fzf sed ripgrep
 
     # On some Ubuntu versions, 'bat' is installed as 'batcat'
     if ! command -v bat &>/dev/null && command -v batcat &>/dev/null; then
