@@ -95,6 +95,18 @@ install_oh_my_zsh() {
   if [ ! -d "${ZSH_CUSTOM}/plugins/zsh-syntax-highlighting" ]; then
     git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "${ZSH_CUSTOM}/plugins/zsh-syntax-highlighting"
   fi
+
+  # you-should-use
+  if [ ! -d "${ZSH_CUSTOM}/plugins/you-should-use" ]; then
+    git clone https://github.com/MichaelAquilina/zsh-you-should-use.git "${ZSH_CUSTOM}/plugins/you-should-use"
+  fi
+
+  # zsh-bat
+  if [ ! -d "${ZSH_CUSTOM}/plugins/zsh-bat" ]; then
+    git clone https://github.com/fdellwing/zsh-bat.git "${ZSH_CUSTOM}/plugins/zsh-bat"
+  fi
+
+  
   success "Oh My Zsh and plugins are set up."
 }
 
