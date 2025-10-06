@@ -8,7 +8,7 @@ export ZSH="$HOME/.oh-my-zsh"
 # load a random theme each time Oh My Zsh is loaded, in which case,
 # to know which specific one was loaded, run: echo $RANDOM_THEME
 # See https://github.com/ohmyzsh/ohmyzsh/wiki/Themes
-ZSH_THEME="bira"
+# ZSH_THEME="bira"
 
 # Set list of themes to pick from when loading at random
 # Setting this variable when ZSH_THEME=random will cause zsh to load
@@ -70,12 +70,19 @@ ZSH_THEME="bira"
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git zsh-autosuggestions zsh-syntax-highlighting you-should-use zsh-bat jsontools history dirhistory
-docker docker-compose extract gcloud man tmux uv zoxide)
+plugins=(git zsh-syntax-highlighting you-should-use jsontools dirhistory docker docker-compose extract tmux uv gcloud universalarchive copyfile)
 
 source $ZSH/oh-my-zsh.sh
 
 # User configuration
+
+# Set up fzf key bindings and fuzzy completion
+if command -v fzf &> /dev/null; then
+  eval '$(source <(fzf --zsh))'
+fi
+
+# Neovim path
+export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
 
 # export MANPATH="/usr/local/man:$MANPATH"
 
@@ -104,6 +111,10 @@ source $ZSH/oh-my-zsh.sh
 alias zshconfig="\$EDITOR ~/.zshrc"
 alias ohmyzsh="\$EDITOR ~/.oh-my-zsh"
 
+alias vim="nvim"
+alias vi="nvim"
+alias v="nvim"
+
 # Initialize zoxide
 if command -v zoxide &> /dev/null; then
   eval "$(zoxide init zsh --cmd cd)"
@@ -118,3 +129,26 @@ fi
 if command -v uvx &> /dev/null; then
   eval "$(uvx --generate-shell-completion zsh)"
 fi
+
+_uv_run_mod() {
+    if [[ "$words[2]" == "run" && "$words[CURRENT]" != -* ]]; then
+        # Check if any previous argument after 'run' ends with .py
+        if [[ ${words[3,$((CURRENT-1))]} =~ ".*\.py" ]]; then
+            # Already have a .py file, complete any files
+            _arguments '*:filename:_files'
+        else
+            # No .py file yet, complete only .py files
+            _arguments '*:filename:_files -g "*.py"'
+        fi
+    else
+        _uv "$@"
+    fi
+}
+compdef _uv_run_mod uv
+
+# Initialize Starship
+eval "$(starship init zsh)"
+
+. "$HOME/.local/bin/env"
+
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
