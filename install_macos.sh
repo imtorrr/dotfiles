@@ -111,6 +111,10 @@ install_oh_my_zsh() {
     git clone https://github.com/MichaelAquilina/zsh-you-should-use.git "${ZSH_CUSTOM}/plugins/you-should-use" || error "Failed to clone you-should-use."
   fi
 
+  if [ ! -d "${ZSH_CUSTOM}/plugins/transient-prompt" ]; then
+    git clone https://github.com/imtorrr/zsh-transient-prompt.git "${ZSH_CUSTOM}/plugins/transient-prompt" || error "Failed to clone zsh-transient-prompt"
+  fi
+
   success "Oh My Zsh and plugins are set up. Your shell is now officially supercharged!"
 }
 
@@ -195,7 +199,7 @@ create_starship_config_symlink() {
 install_neovim() {
   info "Installing Neovim. Get ready to edit like a pro!"
   install_package_brew "neovim"
-  success "Neovim installed. You're already living the $(nvim) life!"
+  success "Neovim installed. You're already living the life!"
 }
 
 install_tree_sitter_cli() {

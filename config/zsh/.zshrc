@@ -70,7 +70,10 @@ export ZSH="$HOME/.oh-my-zsh"
 # Custom plugins may be added to $ZSH_CUSTOM/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git zsh-syntax-highlighting you-should-use jsontools dirhistory docker docker-compose extract tmux uv gcloud universalarchive copyfile)
+
+TRANSIENT_PROMPT_TRANSIENT_PROMPT='% '
+typeset -g TRANSIENT_PROMPT_TRANSIENT_PROMPT=$'%B%F{8}❯%F{220}❯%F{120}❯ %b%f'
+plugins=(git zsh-syntax-highlighting you-should-use jsontools dirhistory docker docker-compose extract tmux uv gcloud universalarchive copyfile transient-prompt)
 
 source $ZSH/oh-my-zsh.sh
 
