@@ -1,426 +1,709 @@
-#!/bin/bash
+#!/usr/bin/env zsh
+# Simple cross-platform dotfiles installer
+# Supports: macOS, Linux (Debian/Ubuntu, Arch), and WSL
+# Usage: ./install.sh [OPTIONS]
+#
+# Options:
+#   -y, --yes    Auto-accept all prompts (non-interactive mode)
+#   -h, --help   Show this help message
+#
+# Note: Uses zsh for associative array support (bash 3.2 on macOS is too old)
 
-# --- Pretty-pride: A colorful and fun logger ---
-# Because who said installations have to be boring?
-
-# Exit immediately if a command exits with a non-zero status.
 set -e
 
-# --- Colors ---
-# No, this is not a unicorn's tear, just some good old ANSI codes.
-readonly C_RESET='[0m'
-readonly C_RED='[0;31m'
-readonly C_GREEN='[0;32m'
-readonly C_BLUE='[0;34m'
-readonly C_YELLOW='[0;33m'
-readonly C_CYAN='[0;36m'
+# -----------------------------------------------------------------------------
+# Configuration
+# -----------------------------------------------------------------------------
 
-# Define the dotfiles directory, assuming the script is run from the repo root.
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+OS_TYPE="$(uname -s | tr '[:upper:]' '[:lower:]')"
+IS_WSL=false
+PKG_MANAGER=""
+AUTO_YES=false
 
-# --- Logging Functions ---
-# Each function is a mini-celebration of your progress.
+# Parse command line arguments
+for arg in "$@"; do
+    case $arg in
+        -y|--yes)
+            AUTO_YES=true
+            shift
+            ;;
+        -h|--help)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  -y, --yes    Auto-accept all prompts (non-interactive mode)"
+            echo "  -h, --help   Show this help message"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $arg"
+            echo "Run '$0 --help' for usage information"
+            exit 1
+            ;;
+    esac
+done
 
-# Info: For when you need to know what's happening.
-info() {
-  printf "${C_BLUE}✨ %s${C_RESET}
-" "$1"
+# Check if we're in WSL
+if grep -qi microsoft /proc/version 2>/dev/null; then
+    IS_WSL=true
+fi
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Package lists (customize these!)
+BREW_PACKAGES=(
+    "git"
+    "neovim"
+    "tmux"
+    "zsh"
+    "fzf"
+    "ripgrep"
+    "bat"
+    "eza"
+    "fd"
+    "zoxide"
+    "starship"
+    "uv"
+    "lazygit"
+    "python@3"
+)
+
+APT_PACKAGES=(
+    "git"
+    "neovim"
+    "tmux"
+    "zsh"
+    "fzf"
+    "ripgrep"
+    "bat"
+    "curl"
+    "wget"
+    "unzip"
+    "build-essential"
+    "zoxide"
+    "starship"
+    "eza"
+    "fd-find"
+    "lazygit"
+    "python3"
+    "python3-pip"
+    "python3-venv"
+)
+
+PACMAN_PACKAGES=(
+    "git"
+    "neovim"
+    "tmux"
+    "zsh"
+    "fzf"
+    "ripgrep"
+    "bat"
+    "curl"
+    "wget"
+    "unzip"
+    "base-devel"
+    "zoxide"
+    "starship"
+    "eza"
+    "fd"
+    "lazygit"
+    "python"
+    "python-pip"
+)
+
+# Config symlinks (source:destination)
+# Add your own config files here!
+typeset -A CONFIGS
+CONFIGS=(
+    "config/zsh/zshrc" "$HOME/.zshrc"
+    "config/zsh/aliases" "$HOME/.config/zsh/.aliases"
+    "config/nvim" "$HOME/.config/nvim"
+    "config/tmux/tmux.conf" "$HOME/.tmux.conf"
+    "config/starship/starship.toml" "$HOME/.config/starship.toml"
+)
+
+# -----------------------------------------------------------------------------
+# Helper Functions
+# -----------------------------------------------------------------------------
+
+print_header() {
+    echo ""
+    echo -e "${BLUE}==>${NC} ${1}"
 }
 
-# Success: For when things go right. *confetti*
-success() {
-  printf "${C_GREEN}🎉 %s${C_RESET}
-" "$1"
+print_success() {
+    echo -e "${GREEN}✓${NC} ${1}"
 }
 
-# Warning: For when you should probably pay attention.
-warn() {
-  printf "${C_YELLOW}🤔 %s${C_RESET}
-" "$1"
+print_error() {
+    echo -e "${RED}✗${NC} ${1}" >&2
 }
 
-# Error: For when the universe has other plans.
-error() {
-  printf "${C_RED}💥 Oops! %s${C_RESET}
-" "$1" >&2
-  exit 1
+print_warning() {
+    echo -e "${YELLOW}!${NC} ${1}"
 }
 
-# --- Main Function ---
-# The heart of our grand installation adventure.
-install_package_apt() {
-  local package_name="$1"
-  if ! dpkg -s "$package_name" &>/dev/null; then
-    info "Installing $package_name... because life's too short for missing dependencies."
-    apt-get install -y "$package_name" || error "Failed to install $package_name. The package manager is giving us attitude."
-    success "$package_name installed. One step closer to digital nirvana!"
-  else
-    warn "$package_name is already installed. We're ahead of the game!"
-  fi
+ask_yes_no() {
+    local prompt="$1"
+
+    # Auto-accept if -y flag was passed
+    if [[ "$AUTO_YES" == true ]]; then
+        echo -e "${YELLOW}?${NC} ${prompt} (y/n): ${GREEN}y${NC} (auto-accepted)"
+        return 0
+    fi
+
+    while true; do
+        read "response?$(echo -e "${YELLOW}?${NC} ${prompt} (y/n): ")"
+        case "$response" in
+            [Yy]*) return 0 ;;
+            [Nn]*) return 1 ;;
+            *) echo "Please answer y or n" ;;
+        esac
+    done
 }
 
-install_zsh() {
-  info "Setting up Zsh, the shell that makes other shells jealous."
-  install_package_apt "zsh"
-  install_package_apt "curl" # Ensure curl is available for the zoxide installer
-  install_package_apt "git"  # Ensure git is available for cloning zsh plugins
+# -----------------------------------------------------------------------------
+# Main Functions
+# -----------------------------------------------------------------------------
 
-  if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    info "Oh My Zsh not found. Let's get this party started!"
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended || error "Oh My Zsh installation failed. The shell gods are displeased."
-    success "Oh My Zsh installed. Your shell just got a major upgrade!"
-  else
-    warn "Oh My Zsh is already installed. You're already living the dream!"
-  fi
+detect_system() {
+    print_header "Detecting system"
+
+    echo "Operating System: $OS_TYPE"
+
+    if [[ "$IS_WSL" == true ]]; then
+        echo "Environment: WSL 2"
+    fi
+
+    # Detect package manager on Linux
+    if [[ "$OS_TYPE" == "linux" ]]; then
+        if command -v apt &>/dev/null; then
+            PKG_MANAGER="apt"
+        elif command -v pacman &>/dev/null; then
+            PKG_MANAGER="pacman"
+        else
+            print_error "No supported package manager found"
+            exit 1
+        fi
+        echo "Package Manager: $PKG_MANAGER"
+    elif [[ "$OS_TYPE" == "darwin" ]]; then
+        if ! command -v brew &>/dev/null; then
+            print_error "Homebrew not found!"
+            echo "Install it from: https://brew.sh"
+            exit 1
+        fi
+        echo "Package Manager: brew"
+    else
+        print_error "Unsupported OS: $OS_TYPE"
+        exit 1
+    fi
+
+    print_success "System detected successfully"
 }
 
-install_oh_my_zsh() {
-  install_package_apt "git"
+install_packages() {
+    print_header "Package Installation"
 
-  # Define the target for Zsh custom plugins
-  local ZSH_CUSTOM="$HOME/.oh-my-zsh/custom"
+    if ! ask_yes_no "Install development packages?"; then
+        print_warning "Skipping package installation"
+        return
+    fi
 
-  if [ ! -d "$HOME/.oh-my-zsh" ]; then
-    info "Installing Oh My Zsh... Because a shell without Oh My Zsh is like a day without sunshine."
-    # Use --unattended to prevent it from changing the default shell or running zsh
-    sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended || error "Oh My Zsh installation failed. The shell gods are displeased."
-  else
-    warn "Oh My Zsh is already installed. You're already living the dream!"
-  fi
+    echo ""
+    echo "Installing packages..."
 
-  info "Installing/updating custom Zsh plugins. This is where the real magic happens!"
-  mkdir -p "${ZSH_CUSTOM}/plugins"
+    if [[ "$OS_TYPE" == "darwin" ]]; then
+        # macOS with Homebrew
+        for pkg in "${BREW_PACKAGES[@]}"; do
+            if brew list "$pkg" &>/dev/null; then
+                print_success "$pkg (already installed)"
+            else
+                echo "Installing $pkg..."
+                brew install "$pkg" && print_success "$pkg installed"
+            fi
+        done
 
-  # zsh-syntax-highlighting
-  if [ ! -d "${ZSH_CUSTOM}/plugins/zsh-syntax-highlighting" ]; then
-    git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "${ZSH_CUSTOM}/plugins/zsh-syntax-highlighting" || error "Failed to clone zsh-syntax-highlighting."
-  fi
+    elif [[ "$OS_TYPE" == "linux" ]]; then
+        if [[ "$PKG_MANAGER" == "apt" ]]; then
+            # Debian/Ubuntu
+            echo "Updating package list..."
+            sudo apt update
 
-  # you-should-use
-  if [ ! -d "${ZSH_CUSTOM}/plugins/you-should-use" ]; then
-    git clone https://github.com/MichaelAquilina/zsh-you-should-use.git "${ZSH_CUSTOM}/plugins/you-should-use" || error "Failed to clone you-should-use."
-  fi
+            for pkg in "${APT_PACKAGES[@]}"; do
+                if dpkg -l | grep -q "^ii  $pkg "; then
+                    print_success "$pkg (already installed)"
+                else
+                    echo "Installing $pkg..."
+                    sudo apt install -y "$pkg" && print_success "$pkg installed"
+                fi
+            done
 
-  if [ ! -d "${ZSH_CUSTOM}/plugins/transient-prompt" ]; then
-    git clone https://github.com/imtorrr/zsh-transient-prompt.git "${ZSH_CUSTOM}/plugins/transient-prompt" || error "Failed to clone zsh-transient-prompt"
-  fi
+        elif [[ "$PKG_MANAGER" == "pacman" ]]; then
+            # Arch Linux
+            echo "Installing packages with pacman..."
+            sudo pacman -Syu --needed --noconfirm "${PACMAN_PACKAGES[@]}"
+            print_success "All packages installed"
+        fi
+    fi
 
-  success "Oh My Zsh and plugins are set up. Your shell is now officially supercharged!"
+    print_success "Package installation complete!"
 }
 
-create_zshrc_symlink() {
-  info "Crafting the perfect .zshrc symlink. It's like magic, but with more command-line."
+create_directories() {
+    print_header "Creating directories"
 
-  # Backup existing .zshrc if it's a real file and not already a symlink
-  if [ -f "$HOME/.zshrc" ] && [ ! -L "$HOME/.zshrc" ]; then
-    warn "Found an old .zshrc. Backing it up to .zshrc.bak, just in case you miss the good old days."
-    mv "$HOME/.zshrc" "$HOME/.zshrc.bak" || error "Couldn't back up .zshrc. Is it shy?"
-  fi
+    local dirs=(
+        "$HOME/.config"
+        "$HOME/.config/zsh"
+        "$HOME/.local/bin"
+    )
 
-  # Create symlink from home directory to the one in the dotfiles repo
-  ln -sf "$DOTFILES_DIR/config/zsh/.zshrc" "$HOME/.zshrc" || error "Failed to create .zshrc symlink. The universe is conspiring against us."
-  success ".zshrc symlink created! Your shell is now officially connected to the matrix."
+    for dir in "${dirs[@]}"; do
+        if [[ ! -d "$dir" ]]; then
+            mkdir -p "$dir"
+            print_success "Created: $dir"
+        fi
+    done
 }
 
-install_build_essential() {
-  info "Installing build-essential. Because every great developer needs their tools, right?"
-  install_package_apt "build-essential"
-  success "build-essential installed. Now we're ready to build some serious stuff!"
+backup_file() {
+    local file="$1"
+    if [[ -e "$file" ]] && [[ ! -L "$file" ]]; then
+        local backup="${file}.backup.$(date +%Y%m%d_%H%M%S)"
+        mv "$file" "$backup"
+        print_warning "Backed up: $(basename "$file") → $(basename "$backup")"
+    fi
 }
 
-install_clipboard_tools() {
-  info "Installing xclip and xsel for clipboard magic. Because copying and pasting should be effortless!"
-  install_package_apt "xclip"
-  install_package_apt "xsel"
-  success "Clipboard tools installed. Your copy-paste game is strong!"
+create_symlinks() {
+    print_header "Creating symlinks"
+
+    if ! ask_yes_no "Create symlinks for config files?"; then
+        print_warning "Skipping symlink creation"
+        return
+    fi
+
+    echo ""
+
+    for source in ${(k)CONFIGS}; do
+        local src="$DOTFILES_DIR/$source"
+        local dest="${CONFIGS[$source]}"
+
+        # Check if source exists
+        if [[ ! -e "$src" ]]; then
+            print_warning "Source not found: $source (skipping)"
+            continue
+        fi
+
+        # Backup existing file
+        backup_file "$dest"
+
+        # Remove existing file/directory/symlink if it still exists
+        rm -rf "$dest" 2>/dev/null || true
+
+        # Create parent directory
+        mkdir -p "$(dirname "$dest")"
+
+        # Create symlink
+        ln -sf "$src" "$dest"
+        print_success "Linked: $source → $dest"
+    done
+
+    print_success "Symlinks created successfully!"
 }
 
-install_zoxide() {
-  info "Installing zoxide, the smart $(cd) command. Because who needs to type full paths anymore?"
-  install_package_apt "curl" # Ensure curl is available for the zoxide installer
+setup_zsh() {
+    print_header "Zsh Setup"
 
-  if ! command -v zoxide &>/dev/null; then
-    info "Running zoxide's official installer. It's like magic, but with more shell scripting."
-    curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh || error "Zoxide installation failed. Did the internet hiccup?"
-    success "zoxide installed. Prepare for warp-speed navigation!"
-  else
-    warn "zoxide is already installed. You're already navigating like a pro!"
-  fi
+    if ! command -v zsh &>/dev/null; then
+        print_warning "Zsh not installed, skipping shell setup"
+        return
+    fi
+
+    local current_shell="$(basename "$SHELL")"
+
+    if [[ "$current_shell" != "zsh" ]]; then
+        if ask_yes_no "Set Zsh as your default shell?"; then
+            local zsh_path="$(which zsh)"
+
+            # Add to valid shells if needed
+            if ! grep -q "$zsh_path" /etc/shells 2>/dev/null; then
+                echo "$zsh_path" | sudo tee -a /etc/shells >/dev/null
+            fi
+
+            chsh -s "$zsh_path"
+            print_success "Shell changed to Zsh (restart terminal to apply)"
+        fi
+    else
+        print_success "Zsh is already your default shell"
+    fi
 }
 
-install_fzf() {
-  info "Installing fzf, the fuzzy finder that'll make you wonder how you lived without it."
-  git clone --depth 1 https://github.com/junegunn/fzf.git $HOME/.fzf
-  $HOME/.fzf/install --all
-  success "fzf installed. Now go find things, fuzzily!"
-}
+setup_git() {
+    print_header "Git Configuration"
 
-install_bat() {
-  info "Installing bat, the cat clone with wings (and syntax highlighting)!"
-  install_package_apt "bat"
+    local git_name="$(git config --global user.name 2>/dev/null)"
+    local git_email="$(git config --global user.email 2>/dev/null)"
 
-  # On some Ubuntu versions, 'bat' is installed as 'batcat'
-  if ! command -v bat &>/dev/null && command -v batcat &>/dev/null; then
-    info "Creating 'bat' symlink for 'batcat'. Because consistency is key!"
-    mkdir -p "$HOME/.local/bin"
-    ln -sf /usr/bin/batcat "$HOME/.local/bin/bat" || error "Failed to create batcat symlink. The symlink fairy is on strike."
-  fi
-  success "bat installed. Your terminal just got a whole lot prettier!"
-}
+    if [[ -z "$git_name" ]]; then
+        read "git_name?Enter your name for Git: "
+        git config --global user.name "$git_name"
+        print_success "Git name set: $git_name"
+    else
+        print_success "Git name: $git_name"
+    fi
 
-install_ripgrep() {
-  info "Installing ripgrep, because searching should be fast and furious!"
-  install_package_apt "ripgrep"
-  success "ripgrep installed. Your search game just leveled up!"
-}
-
-install_fd() {
-  info "Installing fd, the user-friendly alternative to find. Because searching should be simple and fast!"
-  install_package_apt "fd-find"
-  # Create a symlink for 'fd' if the executable is 'fdfind'
-  if ! command -v fd &>/dev/null && command -v fdfind &>/dev/null; then
-    info "Creating 'fd' symlink for 'fdfind'."
-    mkdir -p "$HOME/.local/bin"
-    ln -sf "$(command -v fdfind)" "$HOME/.local/bin/fd" || error "Failed to create fd symlink."
-  fi
-  success "fd installed. Happy hunting!"
-}
-
-install_starship() {
-  info "Installing Starship, the minimal, blazing-fast, and infinitely customizable prompt. Prepare for liftoff!"
-  install_package_apt "curl" # Ensure curl is available for the starship installer
-
-  if ! command -v starship &>/dev/null; then
-    info "Running Starship's official installer. To infinity and beyond!"
-    curl -sS https://starship.rs/install.sh | sh -s -- -y || error "Starship installation failed. Houston, we have a problem."
-    success "Starship installed. Your prompt just got an upgrade to warp speed!"
-  else
-    warn "Starship is already installed. You're already cruising the cosmos!"
-  fi
-}
-
-create_starship_config_symlink() {
-  info "Crafting the perfect starship.toml symlink. Your prompt is about to get a serious upgrade!"
-
-  # Create ~/.config if it doesn't exist
-  mkdir -p "$HOME/.config" || error "Couldn't create ~/.config directory."
-
-  # Backup existing starship.toml if it's a real file and not already a symlink
-  if [ -f "$HOME/.config/starship.toml" ] && [ ! -L "$HOME/.config/starship.toml" ]; then
-    warn "Found an old starship.toml. Backing it up to starship.toml.bak, just in case you miss the good old days."
-    mv "$HOME/.config/starship.toml" "$HOME/.config/starship.toml.bak" || error "Couldn't back up starship.toml. Is it shy?"
-  fi
-
-  # Create symlink from home directory to the one in the dotfiles repo
-  ln -sf "$DOTFILES_DIR/config/starship/starship.toml" "$HOME/.config/starship.toml" || error "Failed to create starship.toml symlink. The universe is conspiring against us."
-  success "starship.toml symlink created! Your prompt is now officially connected to the matrix."
-}
-
-install_neovim() {
-  info "Installing Neovim from the official GitHub releases. Getting the bleeding edge!"
-  install_package_apt "curl" # Ensure curl is available
-
-  if ! command -v nvim &>/dev/null; then
-    info "Downloading Neovim pre-built archive..."
-    curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz || error "Failed to download Neovim archive."
-
-    info "Extracting Neovim to /opt..."
-    rm -rf /opt/nvim-linux-x86_64 || warn "Could not remove existing /opt/nvim-linux-x86_64. Continuing anyway."
-    tar -C /opt -xzf nvim-linux-x86_64.tar.gz || error "Failed to extract Neovim archive."
-
-    info "Cleaning up downloaded archive..."
-    rm nvim-linux-x86_64.tar.gz || warn "Could not remove Neovim archive."
-
-    success "Neovim installed to /opt/nvim-linux-x86_64. Get ready to edit like a pro!"
-  else
-    warn "Neovim is already installed. You're already living the $(nvim) life!"
-  fi
-}
-
-install_nerd_font_jetbrains_mono() {
-  install_package_apt "unzip"
-
-  info "Installing JetBrainsMono Nerd Font. Because your terminal deserves to look amazing!"
-  local FONT_DIR="$HOME/.local/share/fonts"
-  local FONT_ZIP="JetBrainsMono.zip"
-  local FONT_URL="https://github.com/ryanoasis/nerd-fonts/releases/download/v3.2.1/JetBrainsMono.zip"
-
-  mkdir -p "$FONT_DIR" || error "Failed to create font directory."
-
-  info "Downloading JetBrainsMono Nerd Font..."
-  curl -LO "$FONT_URL" || error "Failed to download JetBrainsMono Nerd Font."
-
-  info "Unzipping fonts to $FONT_DIR..."
-  unzip -o "$FONT_ZIP" -d "$FONT_DIR" || error "Failed to unzip JetBrainsMono Nerd Font."
-
-  info "Cleaning up downloaded zip file..."
-  rm "$FONT_ZIP" || warn "Could not remove font zip file."
-
-  info "Updating font cache. Making sure your system knows about the new cool kid in town!"
-  fc-cache -fv || error "Failed to update font cache."
-
-  success "JetBrainsMono Nerd Font installed. Your terminal just got a serious style upgrade!"
-}
-
-install_tree_sitter_cli() {
-  info "Installing tree-sitter-cli. Because parsing code is fun!"
-  install_package_apt "curl" # Ensure curl is available
-
-  if ! command -v tree-sitter &>/dev/null; then
-    info "Downloading tree-sitter-cli pre-built binary..."
-    local TS_VERSION="0.20.8" # Latest stable version as of now
-    local TS_URL="https://github.com/tree-sitter/tree-sitter/releases/download/v${TS_VERSION}/tree-sitter-linux-x64.gz"
-    local TS_BIN="tree-sitter"
-    local TS_PATH="$HOME/.local/bin"
-
-    mkdir -p "$TS_PATH" || error "Failed to create $TS_PATH."
-
-    curl -LO "$TS_URL" || error "Failed to download tree-sitter-cli."
-    gunzip "tree-sitter-linux-x64.gz" || error "Failed to decompress tree-sitter-cli."
-    mv "tree-sitter-linux-x64" "$TS_PATH/$TS_BIN" || error "Failed to move tree-sitter-cli binary."
-    chmod +x "$TS_PATH/$TS_BIN" || error "Failed to make tree-sitter-cli executable."
-
-    success "tree-sitter-cli installed. Your code just got a whole lot smarter!"
-  else
-    warn "tree-sitter-cli is already installed. You're already a parsing wizard!"
-  fi
-}
-
-install_lazyvim() {
-  info "Setting up LazyVim. Because who has time for manual Neovim configuration?"
-  local NVIM_CONFIG_DIR="$HOME/.config/nvim"
-
-  if [ -d "$NVIM_CONFIG_DIR" ]; then
-    warn "Existing Neovim configuration found at $NVIM_CONFIG_DIR. LazyVim will not be installed to avoid overwriting it. Please move or delete it if you want to install LazyVim."
-  else
-    info "Cloning LazyVim starter template. Get ready for a supercharged Neovim experience!"
-    git clone https://github.com/LazyVim/starter "$NVIM_CONFIG_DIR" || error "Failed to clone LazyVim starter template."
-    success "LazyVim installed. Your Neovim is now officially lazy (and awesome)!"
-  fi
-}
-
-install_tmux() {
-  info "Installing tmux, the terminal multiplexer. Because one terminal is never enough!"
-  install_package_apt "tmux"
-  success "tmux installed. Get ready to juggle terminals like a pro!"
-}
-
-install_tpm() {
-  info "Installing TPM (Tmux Plugin Manager). Because managing tmux plugins should be easy!"
-  local TPM_DIR="$HOME/.tmux/plugins/tpm"
-
-  if [ -d "$TPM_DIR" ]; then
-    warn "TPM is already installed. You're already a tmux power user!"
-  else
-    info "Cloning TPM repository..."
-    git clone https://github.com/tmux-plugins/tpm "$TPM_DIR" || error "Failed to clone TPM repository."
-    success "TPM installed. Now go find some awesome tmux plugins!"
-  fi
-}
-
-create_tmux_symlink() {
-  info "Crafting the perfect .tmux.conf symlink. Your tmux sessions are about to get a serious upgrade!"
-
-  # Backup existing .tmux.conf if it's a real file and not already a symlink
-  if [ -f "$HOME/.tmux.conf" ] && [ ! -L "$HOME/.tmux.conf" ]; then
-    warn "Found an old .tmux.conf. Backing it up to .tmux.conf.bak, just in case you miss the good old days."
-    mv "$HOME/.tmux.conf" "$HOME/.tmux.conf.bak" || error "Couldn't back up .tmux.conf. Is it shy?"
-  fi
-
-  # Create symlink from home directory to the one in the dotfiles repo
-  ln -sf "$DOTFILES_DIR/config/tmux/.tmux.conf" "$HOME/.tmux.conf" || error "Failed to create .tmux.conf symlink. The universe is conspiring against us."
-  success ".tmux.conf symlink created! Your tmux is now officially connected to the matrix."
-}
-
-install_uv() {
-  info "Installing uv, the extremely fast Python package installer and resolver. Your Python projects are about to get a speed boost!"
-  install_package_apt "curl" # Ensure curl is available
-
-  if ! command -v uv &>/dev/null; then
-    info "Running uv's official installer. Prepare for lightning-fast Python package management!"
-    curl -LsSf https://astral.sh/uv/install.sh | sh || error "uv installation failed. The Python gods are frowning."
-    success "uv installed. Your Python workflow just got a whole lot faster!"
-  else
-    warn "uv is already installed. You're already managing Python packages at warp speed!"
-  fi
+    if [[ -z "$git_email" ]]; then
+        read "git_email?Enter your email for Git: "
+        git config --global user.email "$git_email"
+        print_success "Git email set: $git_email"
+    else
+        print_success "Git email: $git_email"
+    fi
 }
 
 install_docker() {
-  info "Installing Docker. Get ready to containerize all the things!"
+    print_header "Docker"
 
-  if ! command -v docker &>/dev/null; then
-    # Uninstall old versions
-    info "Uninstalling any conflicting old Docker versions..."
-    for pkg in docker.io docker-doc docker-compose podman-docker containerd runc; do sudo apt-get remove -y $pkg; done
+    if command -v docker &>/dev/null; then
+        print_success "Docker already installed"
+        return
+    fi
 
-    # Add Docker's official GPG key:
-    info "Adding Docker's official GPG key..."
-    sudo apt-get update || error "Failed to update apt packages."
-    sudo apt-get install -y ca-certificates curl gnupg || error "Failed to install ca-certificates, curl, or gnupg."
-    sudo install -m 0755 -d /etc/apt/keyrings || error "Failed to create /etc/apt/keyrings directory."
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg || error "Failed to add Docker GPG key."
-    sudo chmod a+r /etc/apt/keyrings/docker.gpg || error "Failed to set permissions for Docker GPG key."
+    if ! ask_yes_no "Install Docker?"; then
+        print_warning "Skipping Docker installation"
+        return
+    fi
 
-    # Add the repository to Apt sources:
-    info "Adding Docker repository to Apt sources..."
-    echo \
-      "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-      "$(. /etc/os-release && echo "$VERSION_CODENAME")" stable" |
-      sudo tee /etc/apt/sources.list.d/docker.list >/dev/null || error "Failed to add Docker repository."
-    sudo apt-get update || error "Failed to update apt packages after adding Docker repo."
+    if [[ "$OS_TYPE" == "darwin" ]]; then
+        # macOS - install Docker Desktop via Homebrew
+        echo "Installing Docker Desktop..."
+        if brew list --cask docker &>/dev/null; then
+            print_success "Docker Desktop already installed"
+        else
+            brew install --cask docker
+            print_success "Docker Desktop installed"
+            echo "  Launch Docker Desktop from Applications to complete setup"
+        fi
 
-    # Install Docker packages
-    info "Installing Docker Engine, CLI, and Containerd..."
-    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin || error "Failed to install Docker packages."
+    elif [[ "$OS_TYPE" == "linux" ]]; then
+        if [[ "$PKG_MANAGER" == "apt" ]]; then
+            # Debian/Ubuntu
+            echo "Installing Docker Engine..."
 
-    # Add current user to docker group
-    info "Adding current user to the docker group. You might need to log out and back in for this to take effect."
-    sudo usermod -aG docker $USER || error "Failed to add user to docker group."
+            # Remove old versions
+            sudo apt-get remove -y docker docker-engine docker.io containerd runc 2>/dev/null || true
 
-    # Enable and start Docker service
-    info "Enabling and starting Docker service..."
-    sudo systemctl enable docker.service || error "Failed to enable Docker service."
-    sudo systemctl enable containerd.service || error "Failed to enable containerd service."
-    sudo systemctl start docker.service || error "Failed to start Docker service."
-    sudo systemctl start containerd.service || error "Failed to start containerd service."
+            # Install prerequisites
+            sudo apt-get update
+            sudo apt-get install -y ca-certificates curl gnupg lsb-release
 
-    success "Docker installed. Your system is now a container powerhouse!"
-  else
-    warn "Docker is already installed. You're already sailing the container seas!"
-  fi
+            # Add Docker's official GPG key
+            sudo install -m 0755 -d /etc/apt/keyrings
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+            sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+            # Set up the repository
+            echo \
+              "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+              $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+              sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+            # Install Docker Engine
+            sudo apt-get update
+            sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+            print_success "Docker Engine installed"
+
+        elif [[ "$PKG_MANAGER" == "pacman" ]]; then
+            # Arch Linux
+            echo "Installing Docker..."
+            sudo pacman -S --needed --noconfirm docker docker-compose
+
+            # Enable and start Docker service
+            sudo systemctl enable docker.service
+            sudo systemctl start docker.service
+
+            print_success "Docker installed"
+        fi
+
+        # Add user to docker group
+        if ! groups | grep -q docker; then
+            echo "Adding $USER to docker group..."
+            sudo usermod -aG docker "$USER"
+            print_success "User added to docker group"
+            echo "  Log out and back in for group changes to take effect"
+        fi
+    fi
 }
 
-# --- Main Function ---
-# The heart of our grand installation adventure.
+install_nerd_fonts() {
+    print_header "Nerd Fonts"
+
+    if ! ask_yes_no "Install Nerd Fonts?"; then
+        print_warning "Skipping Nerd Fonts installation"
+        return
+    fi
+
+    # Default font to install (you can customize this)
+    local FONT_NAME="JetBrainsMono"
+
+    if [[ "$OS_TYPE" == "darwin" ]]; then
+        # macOS - Check if font files already exist
+        if ls "$HOME/Library/Fonts/"*"JetBrainsMono"*"NerdFont"* &>/dev/null || \
+           ls /Library/Fonts/*"JetBrainsMono"*"NerdFont"* &>/dev/null; then
+            print_success "JetBrainsMono Nerd Font already installed (font files found)"
+        elif brew list --cask font-jetbrains-mono-nerd-font &>/dev/null; then
+            print_success "JetBrainsMono Nerd Font already installed (via Homebrew)"
+        else
+            echo "Installing ${FONT_NAME} Nerd Font via Homebrew..."
+            brew install --cask font-jetbrains-mono-nerd-font
+            print_success "JetBrainsMono Nerd Font installed"
+        fi
+
+    elif [[ "$OS_TYPE" == "linux" ]]; then
+        # Linux - manual download and install
+        local fonts_dir="$HOME/.local/share/fonts/NerdFonts"
+        local temp_dir="/tmp/nerd-fonts"
+
+        # Check if font already exists
+        if ls "$fonts_dir/"*"${FONT_NAME}"* &>/dev/null || \
+           fc-list | grep -qi "${FONT_NAME}.*Nerd"; then
+            print_success "${FONT_NAME} Nerd Font already installed"
+        else
+            mkdir -p "$fonts_dir"
+            mkdir -p "$temp_dir"
+
+            echo "Downloading ${FONT_NAME} Nerd Font..."
+            local font_url="https://github.com/ryanoasis/nerd-fonts/releases/latest/download/${FONT_NAME}.zip"
+
+            if curl -fLo "$temp_dir/${FONT_NAME}.zip" "$font_url"; then
+                echo "Extracting fonts..."
+                unzip -o -q "$temp_dir/${FONT_NAME}.zip" -d "$fonts_dir"
+                rm -rf "$temp_dir"
+
+                echo "Updating font cache..."
+                fc-cache -fv "$fonts_dir" >/dev/null 2>&1
+
+                print_success "${FONT_NAME} Nerd Font installed"
+            else
+                print_error "Failed to download ${FONT_NAME} Nerd Font"
+                rm -rf "$temp_dir"
+                return 1
+            fi
+        fi
+    fi
+
+    echo "  Remember to set your terminal to use a Nerd Font!"
+}
+
+install_tmux_tpm() {
+    print_header "Tmux Plugin Manager"
+
+    local tpm_dir="$HOME/.tmux/plugins/tpm"
+
+    if [[ -d "$tpm_dir" ]]; then
+        print_success "TPM already installed"
+    else
+        if ask_yes_no "Install Tmux Plugin Manager?"; then
+            git clone https://github.com/tmux-plugins/tpm "$tpm_dir"
+            print_success "TPM installed"
+            echo "  Open tmux and press: prefix + I (capital i) to install plugins"
+        fi
+    fi
+}
+
+install_uv() {
+    print_header "UV - Fast Python Package Manager"
+
+    if command -v uv &>/dev/null; then
+        local uv_version="$(uv --version 2>/dev/null | awk '{print $2}')"
+        print_success "UV already installed (version $uv_version)"
+        return
+    fi
+
+    if ! ask_yes_no "Install UV for Python development?"; then
+        print_warning "Skipping UV installation"
+        return
+    fi
+
+    if [[ "$OS_TYPE" == "darwin" ]]; then
+        # On macOS, it should be installed via Homebrew (in package list)
+        if command -v brew &>/dev/null; then
+            echo "Installing UV via Homebrew..."
+            brew install uv && print_success "UV installed via Homebrew"
+        fi
+    else
+        # On Linux, use the official installer
+        echo "Installing UV via official installer..."
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+
+        # Add to PATH for current session
+        export PATH="$HOME/.local/bin:$PATH"
+
+        if command -v uv &>/dev/null; then
+            print_success "UV installed successfully"
+        else
+            print_error "UV installation failed"
+            return 1
+        fi
+    fi
+
+    echo ""
+    echo "UV features:"
+    echo "  • 10-100x faster than pip"
+    echo "  • Drop-in replacement for pip, pip-tools, and virtualenv"
+    echo "  • Compatible with existing Python projects"
+    echo ""
+    echo "Usage examples:"
+    echo "  uv pip install <package>     # Install packages"
+    echo "  uv venv                       # Create virtual environment"
+    echo "  uv pip compile requirements.in -o requirements.txt"
+    echo ""
+}
+
+check_lazyvim_prereqs() {
+    print_header "Checking LazyVim Prerequisites"
+
+    local all_good=true
+
+    # Check Neovim
+    if command -v nvim &>/dev/null; then
+        local nvim_version
+        nvim_version=$(nvim --version | head -1 | awk '{print $2}' | sed 's/v//')
+        if printf '%s\n%s\n' "0.9.0" "$nvim_version" | sort -V -C; then
+            print_success "Neovim $nvim_version (>= 0.9.0 required)"
+        else
+            print_error "Neovim $nvim_version (>= 0.9.0 required)"
+            all_good=false
+        fi
+    else
+        print_error "Neovim not found"
+        all_good=false
+    fi
+
+    # Check Git
+    if command -v git &>/dev/null; then
+        local git_version
+        git_version=$(git --version | awk '{print $3}')
+        if printf '%s\n%s\n' "2.19.0" "$git_version" | sort -V -C; then
+            print_success "Git $git_version (>= 2.19.0 required)"
+        else
+            print_warning "Git $git_version (>= 2.19.0 recommended)"
+        fi
+    else
+        print_error "Git not found"
+        all_good=false
+    fi
+
+    # Check C compiler (for treesitter)
+    if [[ "$OS_TYPE" == "darwin" ]]; then
+        if command -v clang &>/dev/null; then
+            print_success "C compiler (clang) found"
+        else
+            print_warning "C compiler not found - install Xcode Command Line Tools"
+            echo "  Run: xcode-select --install"
+            all_good=false
+        fi
+    else
+        if command -v gcc &>/dev/null || command -v clang &>/dev/null; then
+            print_success "C compiler found"
+        else
+            print_warning "C compiler not found (build-essential package)"
+            all_good=false
+        fi
+    fi
+
+    # Check optional but recommended tools
+    if command -v rg &>/dev/null; then
+        print_success "ripgrep found (for Telescope live grep)"
+    else
+        print_warning "ripgrep not found (recommended for Telescope)"
+    fi
+
+    if command -v fd &>/dev/null; then
+        print_success "fd found (for Telescope file finder)"
+    else
+        print_warning "fd not found (recommended for Telescope)"
+    fi
+
+    if command -v lazygit &>/dev/null; then
+        print_success "lazygit found (for git integration)"
+    else
+        print_warning "lazygit not found (recommended for git UI)"
+    fi
+
+    echo ""
+    if [[ "$all_good" == true ]]; then
+        print_success "All LazyVim prerequisites are installed!"
+        echo ""
+        echo "Your LazyVim config is at: $DOTFILES_DIR/config/nvim"
+        echo ""
+        echo "Next steps:"
+        echo "  1. Symlink will be created during config setup"
+        echo "  2. Run: nvim"
+        echo "  3. Wait for plugins to install automatically"
+        echo "  4. Restart Neovim"
+        echo "  5. Run: :checkhealth"
+    else
+        print_warning "Some prerequisites are missing - install them first"
+    fi
+}
+
+show_next_steps() {
+    print_header "Installation Complete! 🎉"
+
+    echo ""
+    echo -e "${GREEN}Next Steps:${NC}"
+    echo "  1. Restart your terminal (or run: exec zsh)"
+    echo "  2. Review configs in: $DOTFILES_DIR"
+    echo "  3. Customize the CONFIGS array in this script for your dotfiles"
+    echo ""
+    echo -e "${BLUE}Config Files:${NC}"
+
+    for dest in ${(v)CONFIGS}; do
+        echo "  $dest"
+    done
+
+    echo ""
+
+    if command -v tmux &>/dev/null; then
+        echo -e "${YELLOW}Tmux:${NC} Press 'prefix + I' to install plugins"
+    fi
+
+    echo ""
+}
+
+# -----------------------------------------------------------------------------
+# Main Execution
+# -----------------------------------------------------------------------------
+
 main() {
-  info "🚀 Starting the magical Linux setup adventure!"
-  info "Updating package lists. Because even magic needs fresh ingredients!"
-  apt-get update || error "Failed to update apt packages. Is the internet playing hide-and-seek?"
+    clear
 
-  install_zsh
-  install_oh_my_zsh
-  create_zshrc_symlink
-  install_build_essential
-  install_clipboard_tools
-  install_zoxide
-  install_fzf
-  install_bat
-  install_ripgrep
-  install_fd
-  install_starship
-  create_starship_config_symlink
-  install_neovim
-  # install_nerd_font_jetbrains_mono
-  install_tree_sitter_cli
-  install_lazyvim
-  install_tmux
-  install_tpm
-  create_tmux_symlink
-  install_uv
-  # install_docker
+    echo -e "${BLUE}╔════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║${NC}  Simple Dotfiles Installer       ${BLUE}║${NC}"
+    echo -e "${BLUE}╚════════════════════════════════════╝${NC}"
 
-  success "Linux setup complete. Go grab a ☕️, you've earned it!"
+    detect_system
+    create_directories
+    install_packages
+    install_uv
+    check_lazyvim_prereqs
+    create_symlinks
+    setup_zsh
+    setup_git
+    install_docker
+    install_nerd_fonts
+    install_tmux_tpm
+    show_next_steps
 }
-# --- Let the adventure begin! ---
-# This is where we call the main function to kick things off.
+
+# Run the installer
 main "$@"
