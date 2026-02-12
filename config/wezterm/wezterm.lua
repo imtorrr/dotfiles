@@ -87,6 +87,26 @@ config.keys = {
 
 	-- Command palette
 	{ key = "p", mods = mod .. "|SHIFT", action = act.ActivateCommandPalette },
+
+	-- SSH launcher
+	{ key = "s", mods = mod .. "|SHIFT", action = act.ShowLauncherArgs({ flags = "FUZZY|DOMAINS" }) },
+}
+
+-- SSH Domains
+config.ssh_domains = {
+	-- Example SSH domain configurations
+	-- Uncomment and customize as needed
+	-- {
+	-- 	name = "example",
+	-- 	remote_address = "example.com",
+	-- 	username = "yourusername",
+	-- 	-- remote_wezterm_path = "/path/to/wezterm", -- Optional: if wezterm is installed on remote
+	-- },
+	-- {
+	-- 	name = "server",
+	-- 	remote_address = "192.168.1.100",
+	-- 	username = "yourusername",
+	-- },
 }
 
 -- Quick select patterns

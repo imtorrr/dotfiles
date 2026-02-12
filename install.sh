@@ -318,6 +318,78 @@ create_symlinks() {
     print_success "Symlinks created successfully!"
 }
 
+install_oh_my_zsh() {
+    print_header "Oh My Zsh Installation"
+
+    if ! command -v zsh &>/dev/null; then
+        print_warning "Zsh not installed, skipping Oh My Zsh installation"
+        return
+    fi
+
+    local omz_dir="$HOME/.oh-my-zsh"
+
+    if [[ -d "$omz_dir" ]]; then
+        print_success "Oh My Zsh already installed"
+    else
+        if ask_yes_no "Install Oh My Zsh?"; then
+            echo "Installing Oh My Zsh..."
+            # Use unattended installation
+            RUNZSH=no CHSH=no sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+            print_success "Oh My Zsh installed"
+        else
+            print_warning "Skipping Oh My Zsh installation"
+            return
+        fi
+    fi
+}
+
+install_zsh_plugins() {
+    print_header "Zsh Plugins Installation"
+
+    local omz_custom="$HOME/.oh-my-zsh/custom/plugins"
+
+    if [[ ! -d "$HOME/.oh-my-zsh" ]]; then
+        print_warning "Oh My Zsh not installed, skipping plugin installation"
+        return
+    fi
+
+    if ! ask_yes_no "Install custom Zsh plugins?"; then
+        print_warning "Skipping Zsh plugin installation"
+        return
+    fi
+
+    echo ""
+
+    # fzf-tab
+    if [[ -d "$omz_custom/fzf-tab" ]]; then
+        print_success "fzf-tab already installed"
+    else
+        echo "Installing fzf-tab..."
+        git clone https://github.com/Aloxaf/fzf-tab "$omz_custom/fzf-tab"
+        print_success "fzf-tab installed"
+    fi
+
+    # you-should-use
+    if [[ -d "$omz_custom/you-should-use" ]]; then
+        print_success "you-should-use already installed"
+    else
+        echo "Installing you-should-use..."
+        git clone https://github.com/MichaelAquilina/zsh-you-should-use.git "$omz_custom/you-should-use"
+        print_success "you-should-use installed"
+    fi
+
+    # fast-syntax-highlighting
+    if [[ -d "$omz_custom/fast-syntax-highlighting" ]]; then
+        print_success "fast-syntax-highlighting already installed"
+    else
+        echo "Installing fast-syntax-highlighting..."
+        git clone https://github.com/zdharma-continuum/fast-syntax-highlighting.git "$omz_custom/fast-syntax-highlighting"
+        print_success "fast-syntax-highlighting installed"
+    fi
+
+    print_success "Zsh plugins installation complete!"
+}
+
 setup_zsh() {
     print_header "Zsh Setup"
 
