@@ -254,12 +254,12 @@ install_neovim() {
             mkdir -p "$temp_dir"
 
             # Download the .deb package
-            local deb_url="https://github.com/neovim/neovim/releases/download/v${nvim_version}/nvim-linux64.tar.gz"
+            local deb_url="https://github.com/neovim/neovim/releases/download/v${nvim_version}/nvim-linux-x86_64.tar.gz"
 
             echo "Downloading Neovim $nvim_version..."
-            if curl -fLo "$temp_dir/nvim-linux64.tar.gz" "$deb_url"; then
+            if curl -fLo "$temp_dir/nvim-linux-x86_64.tar.gz" "$deb_url"; then
                 echo "Extracting Neovim..."
-                tar -xzf "$temp_dir/nvim-linux64.tar.gz" -C "$temp_dir"
+                tar -xzf "$temp_dir/nvim-linux-x86_64.tar.gz" -C "$temp_dir"
 
                 # Remove old installation if exists
                 sudo rm -rf /opt/nvim
