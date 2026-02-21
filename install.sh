@@ -860,6 +860,8 @@ main() {
     install_uv
     check_lazyvim_prereqs
     create_symlinks
+    install_oh_my_zsh
+    install_zsh_plugins
     setup_zsh
     setup_git
     install_docker
