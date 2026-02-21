@@ -265,7 +265,7 @@ install_neovim() {
                 sudo rm -rf /opt/nvim
 
                 # Move to /opt
-                sudo mv "$temp_dir/nvim-linux64" /opt/nvim
+                sudo mv "$temp_dir/nvim-linux-x86_64" /opt/nvim
 
                 # Create symlink
                 sudo ln -sf /opt/nvim/bin/nvim /usr/local/bin/nvim
