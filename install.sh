@@ -76,7 +76,6 @@ BREW_PACKAGES=(
 
 APT_PACKAGES=(
     "git"
-    "neovim"
     "tmux"
     "zsh"
     "fzf"
@@ -205,6 +204,97 @@ detect_system() {
     fi
 
     print_success "System detected successfully"
+}
+
+install_neovim() {
+    print_header "Neovim Installation"
+
+    local nvim_version="0.11.6"
+
+    if command -v nvim &>/dev/null; then
+        local current_version
+        current_version=$(nvim --version | head -1 | awk '{print $2}' | sed 's/v//')
+
+        if [[ "$current_version" == "$nvim_version" ]]; then
+            print_success "Neovim $current_version (latest version already installed)"
+            return
+        else
+            echo "Current Neovim version: $current_version"
+            if ! ask_yes_no "Update Neovim to version $nvim_version?"; then
+                print_warning "Keeping current Neovim version"
+                return
+            fi
+        fi
+    else
+        if ! ask_yes_no "Install Neovim $nvim_version?"; then
+            print_warning "Skipping Neovim installation"
+            return
+        fi
+    fi
+
+    echo ""
+
+    if [[ "$OS_TYPE" == "darwin" ]]; then
+        # macOS with Homebrew
+        if brew list neovim &>/dev/null; then
+            echo "Upgrading Neovim via Homebrew..."
+            brew upgrade neovim
+        else
+            echo "Installing Neovim via Homebrew..."
+            brew install neovim
+        fi
+        print_success "Neovim installed via Homebrew"
+
+    elif [[ "$OS_TYPE" == "linux" ]]; then
+        if [[ "$PKG_MANAGER" == "apt" ]]; then
+            # Debian/Ubuntu - Install from official GitHub release
+            echo "Installing Neovim $nvim_version from GitHub releases..."
+
+            local temp_dir="/tmp/nvim-install"
+            mkdir -p "$temp_dir"
+
+            # Download the .deb package
+            local deb_url="https://github.com/neovim/neovim/releases/download/v${nvim_version}/nvim-linux64.tar.gz"
+
+            echo "Downloading Neovim $nvim_version..."
+            if curl -fLo "$temp_dir/nvim-linux64.tar.gz" "$deb_url"; then
+                echo "Extracting Neovim..."
+                tar -xzf "$temp_dir/nvim-linux64.tar.gz" -C "$temp_dir"
+
+                # Remove old installation if exists
+                sudo rm -rf /opt/nvim
+
+                # Move to /opt
+                sudo mv "$temp_dir/nvim-linux64" /opt/nvim
+
+                # Create symlink
+                sudo ln -sf /opt/nvim/bin/nvim /usr/local/bin/nvim
+
+                rm -rf "$temp_dir"
+                print_success "Neovim $nvim_version installed from GitHub"
+            else
+                print_error "Failed to download Neovim"
+                rm -rf "$temp_dir"
+                return 1
+            fi
+
+        elif [[ "$PKG_MANAGER" == "pacman" ]]; then
+            # Arch Linux - use package manager (usually has latest version)
+            echo "Installing Neovim via pacman..."
+            sudo pacman -S --needed --noconfirm neovim
+            print_success "Neovim installed via pacman"
+        fi
+    fi
+
+    # Verify installation
+    if command -v nvim &>/dev/null; then
+        local installed_version
+        installed_version=$(nvim --version | head -1 | awk '{print $2}')
+        print_success "Neovim $installed_version is ready"
+    else
+        print_error "Neovim installation verification failed"
+        return 1
+    fi
 }
 
 install_packages() {
@@ -766,6 +856,7 @@ main() {
     detect_system
     create_directories
     install_packages
+    install_neovim
     install_uv
     check_lazyvim_prereqs
     create_symlinks
