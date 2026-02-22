@@ -1,30 +1,32 @@
 # 🚀 My Personal Dotfiles
 
-This repository contains my personal dotfiles, meticulously crafted to set up a consistent, productive, and aesthetically pleasing development environment across Linux systems. The goal is to automate the setup of my shell, tools, and configurations with a single, idempotent command.
+This repository contains my personal dotfiles, meticulously crafted to set up a consistent, productive, and aesthetically pleasing development environment across macOS and Linux systems. The goal is to automate the setup of my shell, tools, and configurations with a single, idempotent command.
 
 ## ✨ Features & Philosophy
 
 This setup is built around a modern Zsh shell experience, enhanced by a curated set of command-line tools and a focus on efficient workflows.
 
-*   **Modern Shell:** Zsh, powered by Oh My Zsh, with a blazing-fast Starship prompt.
-*   **Optimized Workflow:** Integrates tools for fuzzy finding (`fzf`), smart directory navigation (`zoxide`), and powerful text searching (`ripgrep`, `fd`).
-*   **Enhanced Editing:** Neovim, configured with LazyVim, providing a feature-rich and highly customizable editing experience.
-*   **Terminal Powerhouse:** Tmux for robust terminal multiplexing and session management.
-*   **Containerization Ready:** Docker for seamless application containerization.
-*   **Python Development:** `uv` for extremely fast Python package management.
-*   **Organized Configuration:** All configurations are neatly organized within a `config/` directory and symlinked to their respective locations.
-
-For a detailed log of the refactoring process and the current state of the dotfiles, please refer to [GEMINI.md](GEMINI.md).
+*   **Modern Shell:** Zsh powered by Oh My Zsh with the robbyrussell theme, enhanced with custom plugins (fzf-tab, you-should-use, fast-syntax-highlighting)
+*   **Optimized Workflow:** Integrates tools for fuzzy finding (`fzf`), smart directory navigation (`zoxide`), enhanced ls (`eza`, `bat`), and powerful searching (`ripgrep`, `fd`)
+*   **Enhanced Editing:** Neovim configured with LazyVim, providing a feature-rich and highly customizable editing experience
+*   **Terminal Powerhouse:** Tmux with TPM (Tmux Plugin Manager) for robust terminal multiplexing and session management
+*   **Terminal Emulator:** WezTerm configuration included (manual setup required)
+*   **Git Tools:** LazyGit for an intuitive TUI git interface
+*   **Containerization Ready:** Docker for seamless application containerization
+*   **Python Development:** `uv` for extremely fast Python package and environment management
+*   **Organized Configuration:** All configurations are neatly organized within a `config/` directory and symlinked to their respective locations
 
 ## 📦 Installation
 
-The setup process is fully automated by the `install.sh` script for Linux and `install_macos.sh` for macOS.
+The setup process is fully automated by the `install.sh` script, which supports both macOS and Linux (Debian/Ubuntu and Arch).
 
 ### Prerequisites
 
-You need `git` and `curl` to be installed on your system before you begin.
+*   `git` and `curl` must be installed on your system
+*   On macOS: Homebrew will be checked (install from https://brew.sh if missing)
+*   On Linux: `apt` (Debian/Ubuntu) or `pacman` (Arch) package manager
 
-### Linux Steps
+### Installation Steps
 
 1.  **Clone the repository:**
 
@@ -39,34 +41,28 @@ You need `git` and `curl` to be installed on your system before you begin.
     ./install.sh
     ```
 
-    The script will:
-    *   Detect your Linux distribution (Debian-based systems like Ubuntu are supported).
-    *   Install all necessary system dependencies and tools.
-    *   Set up Oh My Zsh and its plugins.
-    *   Install and configure Neovim, Starship, Tmux, Docker, and other utilities.
-    *   Create symbolic links for all configuration files.
-
-### macOS Steps
-
-1.  **Clone the repository:**
+    Or for non-interactive mode (auto-accept all prompts):
 
     ```sh
-    git clone https://github.com/imtorrr/dotfiles.git ~/.dotfiles
+    ./install.sh -y
     ```
 
-2.  **Run the installation script:**
+### What the Script Does
 
-    ```sh
-    cd ~/.dotfiles
-    ./install_macos.sh
-    ```
+The installer will:
 
-    The script will:
-    *   Install Homebrew (if not already installed).
-    *   Install all necessary system dependencies and tools via Homebrew.
-    *   Set up Oh My Zsh and its plugins.
-    *   Install and configure Neovim, Starship, Tmux, and other utilities.
-    *   Create symbolic links for all configuration files.
+*   **Detect your system:** Identifies macOS, Debian/Ubuntu, or Arch Linux
+*   **Install packages:** Core tools including git, neovim (latest version), tmux, zsh, fzf, ripgrep, bat, eza, fd, zoxide, uv, lazygit, and python
+*   **Set up Zsh:** Installs Oh My Zsh and custom plugins (fzf-tab, you-should-use, fast-syntax-highlighting)
+*   **Configure Neovim:** Downloads and installs the latest Neovim version with LazyVim
+*   **Install Docker:** Sets up Docker Engine (Linux) or Docker Desktop (macOS)
+*   **Install fonts:** JetBrainsMono Nerd Font for proper icon display
+*   **Set up Tmux:** Installs TPM (Tmux Plugin Manager)
+*   **Create symlinks:** Links all configuration files to their proper locations
+    *   `~/.zshrc` → `config/zsh/zshrc`
+    *   `~/.config/zsh/.aliases` → `config/zsh/aliases`
+    *   `~/.config/nvim` → `config/nvim`
+    *   `~/.tmux.conf` → `config/tmux/tmux.conf`
 
 ## Post-Installation
 

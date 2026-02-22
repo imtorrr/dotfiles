@@ -68,7 +68,6 @@ BREW_PACKAGES=(
     "eza"
     "fd"
     "zoxide"
-    "starship"
     "uv"
     "lazygit"
     "python@3"
@@ -86,7 +85,6 @@ APT_PACKAGES=(
     "unzip"
     "build-essential"
     "zoxide"
-    "starship"
     "eza"
     "fd-find"
     "lazygit"
@@ -108,7 +106,6 @@ PACMAN_PACKAGES=(
     "unzip"
     "base-devel"
     "zoxide"
-    "starship"
     "eza"
     "fd"
     "lazygit"
@@ -124,7 +121,6 @@ CONFIGS=(
     "config/zsh/aliases" "$HOME/.config/zsh/.aliases"
     "config/nvim" "$HOME/.config/nvim"
     "config/tmux/tmux.conf" "$HOME/.tmux.conf"
-    "config/starship/starship.toml" "$HOME/.config/starship.toml"
 )
 
 # -----------------------------------------------------------------------------
@@ -730,6 +726,7 @@ install_uv() {
     echo ""
 }
 
+
 check_lazyvim_prereqs() {
     print_header "Checking LazyVim Prerequisites"
 
@@ -859,7 +856,6 @@ main() {
     install_neovim
     install_uv
     check_lazyvim_prereqs
-    create_symlinks
     install_oh_my_zsh
     install_zsh_plugins
     setup_zsh
@@ -867,6 +863,7 @@ main() {
     install_docker
     install_nerd_fonts
     install_tmux_tpm
+    create_symlinks
     show_next_steps
 }
 
