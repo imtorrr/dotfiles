@@ -15,7 +15,7 @@ set -e
 # Configuration
 # -----------------------------------------------------------------------------
 
-DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(cd "$(dirname "${(%):-%x}")" && pwd)"
 OS_TYPE="$(uname -s | tr '[:upper:]' '[:lower:]')"
 IS_WSL=false
 PKG_MANAGER=""
@@ -329,6 +329,20 @@ install_packages() {
                     sudo apt install -y "$pkg" && print_success "$pkg installed"
                 fi
             done
+
+            # Debian/Ubuntu install fd-find and bat under different binary names;
+            # symlink them to the expected names so configs/aliases that call
+            # `fd` / `bat` directly keep working.
+            if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
+                mkdir -p "$HOME/.local/bin"
+                ln -sf "$(command -v fdfind)" "$HOME/.local/bin/fd"
+                print_success "Symlinked fdfind -> fd"
+            fi
+            if command -v batcat &>/dev/null && ! command -v bat &>/dev/null; then
+                mkdir -p "$HOME/.local/bin"
+                ln -sf "$(command -v batcat)" "$HOME/.local/bin/bat"
+                print_success "Symlinked batcat -> bat"
+            fi
 
         elif [[ "$PKG_MANAGER" == "pacman" ]]; then
             # Arch Linux

@@ -101,7 +101,7 @@ source $ZSH/oh-my-zsh.sh
 
 # Set up fzf key bindings and fuzzy completion
 if command -v fzf &> /dev/null; then
-  eval '$(source <(fzf --zsh))'
+  eval "$(fzf --zsh)"
 fi
 
 # export MANPATH="/usr/local/man:$MANPATH"
