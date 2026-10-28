@@ -67,7 +67,9 @@ $WingetPackages = @(
     "Python.Python.3.12",
     "Docker.DockerDesktop",
     "ObsidianMD.Obsidian",
-    "JanDeDobbeleer.OhMyPosh"
+    "Starship.Starship",
+    "ellie.atuin",
+    "direnv.direnv"
 )
 
 function Install-Packages {
@@ -190,6 +192,7 @@ function Install-ConfigSymlinks {
     New-ConfigSymlink "config\powershell\profile.ps1" $PROFILE
     New-ConfigSymlink "config\nvim" "$env:LOCALAPPDATA\nvim"
     New-ConfigSymlink "config\wezterm\wezterm.lua" "$env:USERPROFILE\.wezterm.lua"
+    New-ConfigSymlink "config\starship.toml" "$env:USERPROFILE\.config\starship.toml"
 
     Write-Success "Symlinks created successfully!"
 }

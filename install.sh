@@ -20,6 +20,7 @@ OS_TYPE="$(uname -s | tr '[:upper:]' '[:lower:]')"
 IS_WSL=false
 PKG_MANAGER=""
 AUTO_YES=false
+DRY_RUN=false
 
 # Parse command line arguments
 for arg in "$@"; do
@@ -28,12 +29,17 @@ for arg in "$@"; do
             AUTO_YES=true
             shift
             ;;
+        -n|--dry-run)
+            DRY_RUN=true
+            shift
+            ;;
         -h|--help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  -y, --yes    Auto-accept all prompts (non-interactive mode)"
-            echo "  -h, --help   Show this help message"
+            echo "  -y, --yes       Auto-accept all prompts (non-interactive mode)"
+            echo "  -n, --dry-run   Print what would be done without doing it"
+            echo "  -h, --help      Show this help message"
             exit 0
             ;;
         *)
@@ -71,6 +77,9 @@ BREW_PACKAGES=(
     "uv"
     "lazygit"
     "python@3"
+    "starship"
+    "direnv"
+    "atuin"
 )
 
 APT_PACKAGES=(
@@ -91,6 +100,7 @@ APT_PACKAGES=(
     "python3"
     "python3-pip"
     "python3-venv"
+    "direnv"
 )
 
 PACMAN_PACKAGES=(
@@ -111,6 +121,9 @@ PACMAN_PACKAGES=(
     "lazygit"
     "python"
     "python-pip"
+    "starship"
+    "direnv"
+    "atuin"
 )
 
 # Config symlinks (source:destination)
@@ -121,7 +134,21 @@ CONFIGS=(
     "config/zsh/aliases" "$HOME/.config/zsh/.aliases"
     "config/nvim" "$HOME/.config/nvim"
     "config/tmux/tmux.conf" "$HOME/.tmux.conf"
+    "config/starship.toml" "$HOME/.config/starship.toml"
 )
+
+# -----------------------------------------------------------------------------
+# Dry-run command wrapper
+# -----------------------------------------------------------------------------
+# Wrap state-changing commands with this instead of calling them directly.
+# Under --dry-run it just prints the command; otherwise it executes normally.
+run_cmd() {
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[dry-run]${NC} $*"
+    else
+        "$@"
+    fi
+}
 
 # -----------------------------------------------------------------------------
 # Helper Functions
@@ -304,6 +331,18 @@ install_packages() {
     echo ""
     echo "Installing packages..."
 
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[dry-run]${NC} Would install packages for $OS_TYPE/$PKG_MANAGER:"
+        if [[ "$OS_TYPE" == "darwin" ]]; then
+            printf '  %s\n' "${BREW_PACKAGES[@]}"
+        elif [[ "$PKG_MANAGER" == "apt" ]]; then
+            printf '  %s\n' "${APT_PACKAGES[@]}" "starship (via official installer)" "atuin (via official installer)"
+        elif [[ "$PKG_MANAGER" == "pacman" ]]; then
+            printf '  %s\n' "${PACMAN_PACKAGES[@]}"
+        fi
+        return
+    fi
+
     if [[ "$OS_TYPE" == "darwin" ]]; then
         # macOS with Homebrew
         for pkg in "${BREW_PACKAGES[@]}"; do
@@ -342,6 +381,22 @@ install_packages() {
                 mkdir -p "$HOME/.local/bin"
                 ln -sf "$(command -v batcat)" "$HOME/.local/bin/bat"
                 print_success "Symlinked batcat -> bat"
+            fi
+
+            # starship and atuin aren't in Debian's default repos; use their
+            # official install scripts instead.
+            if command -v starship &>/dev/null; then
+                print_success "starship (already installed)"
+            else
+                echo "Installing starship..."
+                curl -sS https://starship.rs/install.sh | sh -s -- -y && print_success "starship installed"
+            fi
+
+            if command -v atuin &>/dev/null; then
+                print_success "atuin (already installed)"
+            else
+                echo "Installing atuin..."
+                curl --proto '=https' --tlsv1.2 -sSf https://setup.atuin.sh | sh && print_success "atuin installed"
             fi
 
         elif [[ "$PKG_MANAGER" == "pacman" ]]; then
@@ -398,6 +453,11 @@ create_symlinks() {
         # Check if source exists
         if [[ ! -e "$src" ]]; then
             print_warning "Source not found: $source (skipping)"
+            continue
+        fi
+
+        if [[ "$DRY_RUN" == true ]]; then
+            echo -e "${YELLOW}[dry-run]${NC} Would link: $source → $dest"
             continue
         fi
 
@@ -501,6 +561,11 @@ setup_zsh() {
     local current_shell="$(basename "$SHELL")"
 
     if [[ "$current_shell" != "zsh" ]]; then
+        if [[ "$DRY_RUN" == true ]]; then
+            echo -e "${YELLOW}[dry-run]${NC} Would change default shell to zsh (chsh)"
+            return
+        fi
+
         if ask_yes_no "Set Zsh as your default shell?"; then
             local zsh_path="$(which zsh)"
 
@@ -550,6 +615,11 @@ install_docker() {
 
     if ! ask_yes_no "Install Docker?"; then
         print_warning "Skipping Docker installation"
+        return
+    fi
+
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[dry-run]${NC} Would install Docker for $OS_TYPE"
         return
     fi
 
@@ -625,6 +695,11 @@ install_obsidian() {
 
     if ! ask_yes_no "Install Obsidian (note-taking app)?"; then
         print_warning "Skipping Obsidian installation"
+        return
+    fi
+
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[dry-run]${NC} Would install Obsidian for $OS_TYPE"
         return
     fi
 

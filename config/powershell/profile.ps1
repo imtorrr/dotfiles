@@ -1,9 +1,20 @@
 # PowerShell profile — symlinked to $PROFILE by install.ps1
 # Equivalent of config/zsh/zshrc + aliases, for native Windows PowerShell.
 
-# --- Prompt (oh-my-posh is the zsh-theme equivalent on Windows) ---
-if (Get-Command oh-my-posh -ErrorAction SilentlyContinue) {
-    oh-my-posh init pwsh | Invoke-Expression
+# --- Prompt (starship — shared config with zsh, see config/starship.toml) ---
+if (Get-Command starship -ErrorAction SilentlyContinue) {
+    $env:STARSHIP_CONFIG = Join-Path (Split-Path $PSScriptRoot -Parent) "starship.toml"
+    Invoke-Expression (&starship init powershell)
+}
+
+# --- atuin (searchable, syncable shell history) ---
+if (Get-Command atuin -ErrorAction SilentlyContinue) {
+    Invoke-Expression (& { (atuin init powershell | Out-String) })
+}
+
+# --- direnv (auto-load/unload per-directory env vars and venvs) ---
+if (Get-Command direnv -ErrorAction SilentlyContinue) {
+    Invoke-Expression (& { (direnv hook pwsh | Out-String) })
 }
 
 # --- zoxide (smart cd) ---
