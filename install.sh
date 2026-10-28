@@ -615,6 +615,54 @@ install_docker() {
     fi
 }
 
+install_obsidian() {
+    print_header "Obsidian"
+
+    if command -v obsidian &>/dev/null || [[ -d "/Applications/Obsidian.app" ]]; then
+        print_success "Obsidian already installed"
+        return
+    fi
+
+    if ! ask_yes_no "Install Obsidian (note-taking app)?"; then
+        print_warning "Skipping Obsidian installation"
+        return
+    fi
+
+    if [[ "$OS_TYPE" == "darwin" ]]; then
+        echo "Installing Obsidian via Homebrew..."
+        brew install --cask obsidian && print_success "Obsidian installed"
+
+    elif [[ "$OS_TYPE" == "linux" ]]; then
+        if command -v flatpak &>/dev/null; then
+            echo "Installing Obsidian via Flatpak..."
+            flatpak install -y flathub md.obsidian.Obsidian && print_success "Obsidian installed (Flatpak)"
+        elif [[ "$PKG_MANAGER" == "pacman" ]]; then
+            echo "Installing Obsidian via pacman..."
+            sudo pacman -S --needed --noconfirm obsidian && print_success "Obsidian installed"
+        else
+            # Debian/Ubuntu: no official apt repo, use the AppImage
+            echo "Flatpak not found; installing Obsidian AppImage..."
+            local appimage_dir="$HOME/.local/bin"
+            mkdir -p "$appimage_dir"
+
+            local api_url="https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest"
+            local download_url
+            download_url=$(curl -fsSL "$api_url" | grep "browser_download_url.*AppImage" | grep -v '\.asc"' | head -1 | cut -d '"' -f4)
+
+            if [[ -n "$download_url" ]]; then
+                curl -fLo "$appimage_dir/obsidian.AppImage" "$download_url"
+                chmod +x "$appimage_dir/obsidian.AppImage"
+                ln -sf "$appimage_dir/obsidian.AppImage" "$appimage_dir/obsidian"
+                print_success "Obsidian AppImage installed to $appimage_dir"
+                echo "  Note: AppImages need FUSE (libfuse2) on some distros to run."
+            else
+                print_error "Could not find Obsidian AppImage download URL"
+                return 1
+            fi
+        fi
+    fi
+}
+
 install_nerd_fonts() {
     print_header "Nerd Fonts"
 
@@ -875,6 +923,7 @@ main() {
     setup_zsh
     setup_git
     install_docker
+    install_obsidian
     install_nerd_fonts
     install_tmux_tpm
     create_symlinks
