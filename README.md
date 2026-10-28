@@ -18,13 +18,36 @@ This setup is built around a modern Zsh shell experience, enhanced by a curated 
 
 ## 📦 Installation
 
-The setup process is fully automated by the `install.sh` script, which supports both macOS and Linux (Debian/Ubuntu and Arch).
+The setup process is automated by `install.sh` (macOS, Linux — Debian/Ubuntu,
+Arch, and Raspberry Pi OS) or `install.ps1` (native Windows PowerShell).
 
 ### Prerequisites
 
 *   `git` and `curl` must be installed on your system
 *   On macOS: Homebrew will be checked (install from https://brew.sh if missing)
-*   On Linux: `apt` (Debian/Ubuntu) or `pacman` (Arch) package manager
+*   On Linux: `apt` (Debian/Ubuntu/Raspberry Pi OS) or `pacman` (Arch) package manager
+*   On Windows: `winget` (ships with Windows 11 / recent Windows 10 via "App
+    Installer" from the Microsoft Store), PowerShell 5.1+
+
+### Windows Installation
+
+```powershell
+git clone https://github.com/imtorrr/dotfiles.git ~/.dotfiles
+cd ~/.dotfiles
+./install.ps1
+```
+
+Symlinking configs (PowerShell profile, Neovim config, WezTerm config) needs
+either an **elevated (Administrator) PowerShell**, or **Developer Mode**
+enabled (Settings → Privacy & Security → For developers). Without one of
+those, Windows blocks symlink creation and that step will fail with a clear
+message telling you which to use.
+
+The Windows side uses a different ecosystem than zsh (no Oh My Zsh equivalent
+natively) — `oh-my-posh` replaces the Oh My Zsh theme, and `PSFzf` replaces
+the shell-native fzf keybindings. Everything else (Neovim/LazyVim, WezTerm,
+the daily-note `today` function) is functionally equivalent across all
+platforms.
 
 ### Installation Steps
 

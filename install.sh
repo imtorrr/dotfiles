@@ -15,11 +15,12 @@ set -e
 # Configuration
 # -----------------------------------------------------------------------------
 
-DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DOTFILES_DIR="$(cd "$(dirname "${(%):-%x}")" && pwd)"
 OS_TYPE="$(uname -s | tr '[:upper:]' '[:lower:]')"
 IS_WSL=false
 PKG_MANAGER=""
 AUTO_YES=false
+DRY_RUN=false
 
 # Parse command line arguments
 for arg in "$@"; do
@@ -28,12 +29,17 @@ for arg in "$@"; do
             AUTO_YES=true
             shift
             ;;
+        -n|--dry-run)
+            DRY_RUN=true
+            shift
+            ;;
         -h|--help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
             echo "Options:"
-            echo "  -y, --yes    Auto-accept all prompts (non-interactive mode)"
-            echo "  -h, --help   Show this help message"
+            echo "  -y, --yes       Auto-accept all prompts (non-interactive mode)"
+            echo "  -n, --dry-run   Print what would be done without doing it"
+            echo "  -h, --help      Show this help message"
             exit 0
             ;;
         *)
@@ -71,6 +77,9 @@ BREW_PACKAGES=(
     "uv"
     "lazygit"
     "python@3"
+    "starship"
+    "direnv"
+    "atuin"
 )
 
 APT_PACKAGES=(
@@ -91,6 +100,7 @@ APT_PACKAGES=(
     "python3"
     "python3-pip"
     "python3-venv"
+    "direnv"
 )
 
 PACMAN_PACKAGES=(
@@ -111,6 +121,9 @@ PACMAN_PACKAGES=(
     "lazygit"
     "python"
     "python-pip"
+    "starship"
+    "direnv"
+    "atuin"
 )
 
 # Config symlinks (source:destination)
@@ -121,7 +134,21 @@ CONFIGS=(
     "config/zsh/aliases" "$HOME/.config/zsh/.aliases"
     "config/nvim" "$HOME/.config/nvim"
     "config/tmux/tmux.conf" "$HOME/.tmux.conf"
+    "config/starship.toml" "$HOME/.config/starship.toml"
 )
+
+# -----------------------------------------------------------------------------
+# Dry-run command wrapper
+# -----------------------------------------------------------------------------
+# Wrap state-changing commands with this instead of calling them directly.
+# Under --dry-run it just prints the command; otherwise it executes normally.
+run_cmd() {
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[dry-run]${NC} $*"
+    else
+        "$@"
+    fi
+}
 
 # -----------------------------------------------------------------------------
 # Helper Functions
@@ -304,6 +331,18 @@ install_packages() {
     echo ""
     echo "Installing packages..."
 
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[dry-run]${NC} Would install packages for $OS_TYPE/$PKG_MANAGER:"
+        if [[ "$OS_TYPE" == "darwin" ]]; then
+            printf '  %s\n' "${BREW_PACKAGES[@]}"
+        elif [[ "$PKG_MANAGER" == "apt" ]]; then
+            printf '  %s\n' "${APT_PACKAGES[@]}" "starship (via official installer)" "atuin (via official installer)"
+        elif [[ "$PKG_MANAGER" == "pacman" ]]; then
+            printf '  %s\n' "${PACMAN_PACKAGES[@]}"
+        fi
+        return
+    fi
+
     if [[ "$OS_TYPE" == "darwin" ]]; then
         # macOS with Homebrew
         for pkg in "${BREW_PACKAGES[@]}"; do
@@ -329,6 +368,36 @@ install_packages() {
                     sudo apt install -y "$pkg" && print_success "$pkg installed"
                 fi
             done
+
+            # Debian/Ubuntu install fd-find and bat under different binary names;
+            # symlink them to the expected names so configs/aliases that call
+            # `fd` / `bat` directly keep working.
+            if command -v fdfind &>/dev/null && ! command -v fd &>/dev/null; then
+                mkdir -p "$HOME/.local/bin"
+                ln -sf "$(command -v fdfind)" "$HOME/.local/bin/fd"
+                print_success "Symlinked fdfind -> fd"
+            fi
+            if command -v batcat &>/dev/null && ! command -v bat &>/dev/null; then
+                mkdir -p "$HOME/.local/bin"
+                ln -sf "$(command -v batcat)" "$HOME/.local/bin/bat"
+                print_success "Symlinked batcat -> bat"
+            fi
+
+            # starship and atuin aren't in Debian's default repos; use their
+            # official install scripts instead.
+            if command -v starship &>/dev/null; then
+                print_success "starship (already installed)"
+            else
+                echo "Installing starship..."
+                curl -sS https://starship.rs/install.sh | sh -s -- -y && print_success "starship installed"
+            fi
+
+            if command -v atuin &>/dev/null; then
+                print_success "atuin (already installed)"
+            else
+                echo "Installing atuin..."
+                curl --proto '=https' --tlsv1.2 -sSf https://setup.atuin.sh | sh && print_success "atuin installed"
+            fi
 
         elif [[ "$PKG_MANAGER" == "pacman" ]]; then
             # Arch Linux
@@ -361,7 +430,8 @@ create_directories() {
 backup_file() {
     local file="$1"
     if [[ -e "$file" ]] && [[ ! -L "$file" ]]; then
-        local backup="${file}.backup.$(date +%Y%m%d_%H%M%S)"
+        local backup
+        backup="${file}.backup.$(date +%Y%m%d_%H%M%S)"
         mv "$file" "$backup"
         print_warning "Backed up: $(basename "$file") → $(basename "$backup")"
     fi
@@ -384,6 +454,11 @@ create_symlinks() {
         # Check if source exists
         if [[ ! -e "$src" ]]; then
             print_warning "Source not found: $source (skipping)"
+            continue
+        fi
+
+        if [[ "$DRY_RUN" == true ]]; then
+            echo -e "${YELLOW}[dry-run]${NC} Would link: $source → $dest"
             continue
         fi
 
@@ -484,11 +559,18 @@ setup_zsh() {
         return
     fi
 
-    local current_shell="$(basename "$SHELL")"
+    local current_shell
+    current_shell="$(basename "$SHELL")"
 
     if [[ "$current_shell" != "zsh" ]]; then
+        if [[ "$DRY_RUN" == true ]]; then
+            echo -e "${YELLOW}[dry-run]${NC} Would change default shell to zsh (chsh)"
+            return
+        fi
+
         if ask_yes_no "Set Zsh as your default shell?"; then
-            local zsh_path="$(which zsh)"
+            local zsh_path
+            zsh_path="$(which zsh)"
 
             # Add to valid shells if needed
             if ! grep -q "$zsh_path" /etc/shells 2>/dev/null; then
@@ -506,8 +588,9 @@ setup_zsh() {
 setup_git() {
     print_header "Git Configuration"
 
-    local git_name="$(git config --global user.name 2>/dev/null)"
-    local git_email="$(git config --global user.email 2>/dev/null)"
+    local git_name git_email
+    git_name="$(git config --global user.name 2>/dev/null)"
+    git_email="$(git config --global user.email 2>/dev/null)"
 
     if [[ -z "$git_name" ]]; then
         read "git_name?Enter your name for Git: "
@@ -536,6 +619,11 @@ install_docker() {
 
     if ! ask_yes_no "Install Docker?"; then
         print_warning "Skipping Docker installation"
+        return
+    fi
+
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[dry-run]${NC} Would install Docker for $OS_TYPE"
         return
     fi
 
@@ -597,6 +685,59 @@ install_docker() {
             sudo usermod -aG docker "$USER"
             print_success "User added to docker group"
             echo "  Log out and back in for group changes to take effect"
+        fi
+    fi
+}
+
+install_obsidian() {
+    print_header "Obsidian"
+
+    if command -v obsidian &>/dev/null || [[ -d "/Applications/Obsidian.app" ]]; then
+        print_success "Obsidian already installed"
+        return
+    fi
+
+    if ! ask_yes_no "Install Obsidian (note-taking app)?"; then
+        print_warning "Skipping Obsidian installation"
+        return
+    fi
+
+    if [[ "$DRY_RUN" == true ]]; then
+        echo -e "${YELLOW}[dry-run]${NC} Would install Obsidian for $OS_TYPE"
+        return
+    fi
+
+    if [[ "$OS_TYPE" == "darwin" ]]; then
+        echo "Installing Obsidian via Homebrew..."
+        brew install --cask obsidian && print_success "Obsidian installed"
+
+    elif [[ "$OS_TYPE" == "linux" ]]; then
+        if command -v flatpak &>/dev/null; then
+            echo "Installing Obsidian via Flatpak..."
+            flatpak install -y flathub md.obsidian.Obsidian && print_success "Obsidian installed (Flatpak)"
+        elif [[ "$PKG_MANAGER" == "pacman" ]]; then
+            echo "Installing Obsidian via pacman..."
+            sudo pacman -S --needed --noconfirm obsidian && print_success "Obsidian installed"
+        else
+            # Debian/Ubuntu: no official apt repo, use the AppImage
+            echo "Flatpak not found; installing Obsidian AppImage..."
+            local appimage_dir="$HOME/.local/bin"
+            mkdir -p "$appimage_dir"
+
+            local api_url="https://api.github.com/repos/obsidianmd/obsidian-releases/releases/latest"
+            local download_url
+            download_url=$(curl -fsSL "$api_url" | grep "browser_download_url.*AppImage" | grep -v '\.asc"' | head -1 | cut -d '"' -f4)
+
+            if [[ -n "$download_url" ]]; then
+                curl -fLo "$appimage_dir/obsidian.AppImage" "$download_url"
+                chmod +x "$appimage_dir/obsidian.AppImage"
+                ln -sf "$appimage_dir/obsidian.AppImage" "$appimage_dir/obsidian"
+                print_success "Obsidian AppImage installed to $appimage_dir"
+                echo "  Note: AppImages need FUSE (libfuse2) on some distros to run."
+            else
+                print_error "Could not find Obsidian AppImage download URL"
+                return 1
+            fi
         fi
     fi
 }
@@ -681,7 +822,8 @@ install_uv() {
     print_header "UV - Fast Python Package Manager"
 
     if command -v uv &>/dev/null; then
-        local uv_version="$(uv --version 2>/dev/null | awk '{print $2}')"
+        local uv_version
+        uv_version="$(uv --version 2>/dev/null | awk '{print $2}')"
         print_success "UV already installed (version $uv_version)"
         return
     fi
@@ -861,6 +1003,7 @@ main() {
     setup_zsh
     setup_git
     install_docker
+    install_obsidian
     install_nerd_fonts
     install_tmux_tpm
     create_symlinks

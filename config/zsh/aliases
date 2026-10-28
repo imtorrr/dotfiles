@@ -10,3 +10,34 @@ fi
 alias nvim="uv run nvim"
 alias vim="nvim"
 alias v="nvim"
+
+# Daily note in Obsidian vault — creates today's note if missing,
+# carrying forward any unchecked tasks from the most recent daily note.
+today() {
+  local vault="${OBSIDIAN_VAULT_PATH:-$HOME/my_brain}"
+  local dir="$vault/00_Inbox/Daily"
+  mkdir -p "$dir"
+
+  local file="$dir/$(date +%Y-%m-%d).md"
+
+  if [[ ! -f "$file" ]]; then
+    local last
+    last=$(ls -t "$dir"/*.md 2>/dev/null | grep -v "$(date +%Y-%m-%d).md" | head -1)
+
+    {
+      echo "# $(date +%Y-%m-%d)"
+      echo ""
+      echo "## Today"
+      echo ""
+      if [[ -n "$last" ]]; then
+        grep "^- \[ \]" "$last" 2>/dev/null
+      fi
+      echo "- [ ] "
+      echo ""
+      echo "## Notes"
+      echo ""
+    } > "$file"
+  fi
+
+  nvim "$file"
+}
