@@ -430,7 +430,8 @@ create_directories() {
 backup_file() {
     local file="$1"
     if [[ -e "$file" ]] && [[ ! -L "$file" ]]; then
-        local backup="${file}.backup.$(date +%Y%m%d_%H%M%S)"
+        local backup
+        backup="${file}.backup.$(date +%Y%m%d_%H%M%S)"
         mv "$file" "$backup"
         print_warning "Backed up: $(basename "$file") → $(basename "$backup")"
     fi
@@ -558,7 +559,8 @@ setup_zsh() {
         return
     fi
 
-    local current_shell="$(basename "$SHELL")"
+    local current_shell
+    current_shell="$(basename "$SHELL")"
 
     if [[ "$current_shell" != "zsh" ]]; then
         if [[ "$DRY_RUN" == true ]]; then
@@ -567,7 +569,8 @@ setup_zsh() {
         fi
 
         if ask_yes_no "Set Zsh as your default shell?"; then
-            local zsh_path="$(which zsh)"
+            local zsh_path
+            zsh_path="$(which zsh)"
 
             # Add to valid shells if needed
             if ! grep -q "$zsh_path" /etc/shells 2>/dev/null; then
@@ -585,8 +588,9 @@ setup_zsh() {
 setup_git() {
     print_header "Git Configuration"
 
-    local git_name="$(git config --global user.name 2>/dev/null)"
-    local git_email="$(git config --global user.email 2>/dev/null)"
+    local git_name git_email
+    git_name="$(git config --global user.name 2>/dev/null)"
+    git_email="$(git config --global user.email 2>/dev/null)"
 
     if [[ -z "$git_name" ]]; then
         read "git_name?Enter your name for Git: "
@@ -818,7 +822,8 @@ install_uv() {
     print_header "UV - Fast Python Package Manager"
 
     if command -v uv &>/dev/null; then
-        local uv_version="$(uv --version 2>/dev/null | awk '{print $2}')"
+        local uv_version
+        uv_version="$(uv --version 2>/dev/null | awk '{print $2}')"
         print_success "UV already installed (version $uv_version)"
         return
     fi
